@@ -1,21 +1,29 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const cors = require('cors');
-const bodyParser = require('body-parser');
+require('dotenv').config();
 
 const app = express();
-const PORT = 3000;
-
-
 app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.json());
 
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('✅ MongoDB conectado'))
+  .catch(err => console.log('❌ Error MongoDB:', err));
+
+const routesMongo = require('./routes/mongo');
+const routesSQLite = require('./routes/sqlite');
+
+app.use('/api/mongo', routesMongo);
+app.use('/api/sqlite', routesSQLite);
+
+app.listen(5000, () => console.log('🚀 Puerto 5000'));
 
 let usuarios = [];
 let nextId = 1;
 
 
-app.post('/api/usuarios', (req, res) => {
+app.post('/usuarios', (req, res) => {
   try {
     const { dni, nombres, apellidos, fechaNacimiento, genero, ciudad } = req.body;
     
@@ -68,12 +76,12 @@ app.post('/api/usuarios', (req, res) => {
 });
 
 
-app.get('/api/usuarios', (req, res) => {
+app.get('/usuarios', (req, res) => {
   res.json(usuarios);
 });
 
 
-app.get('/api/usuarios/:id', (req, res) => {
+app.get('/usuarios/:id', (req, res) => {
   const usuario = usuarios.find(u => u.id === parseInt(req.params.id));
   
   if (!usuario) {
@@ -84,7 +92,7 @@ app.get('/api/usuarios/:id', (req, res) => {
 });
 
 
-app.put('/api/usuarios/:id', (req, res) => {
+app.put('/usuarios/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const index = usuarios.findIndex(u => u.id === id);
@@ -144,7 +152,7 @@ app.put('/api/usuarios/:id', (req, res) => {
 });
 
 
-app.delete('/api/usuarios/:id', (req, res) => {
+app.delete('/usuarios/:id', (req, res) => {
   const id = parseInt(req.params.id);
   const index = usuarios.findIndex(u => u.id === id);
   
@@ -164,11 +172,11 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'API de Formulario funcionando',
     endpoints: {
-      'GET /api/usuarios': 'Obtener todos los usuarios',
-      'GET /api/usuarios/:id': 'Obtener usuario por ID',
-      'POST /api/usuarios': 'Crear nuevo usuario',
-      'PUT /api/usuarios/:id': 'Actualizar usuario',
-      'DELETE /api/usuarios/:id': 'Eliminar usuario'
+      'GET /usuarios': 'Obtener todos los usuarios',
+      'GET /usuarios/:id': 'Obtener usuario por ID',
+      'POST /usuarios': 'Crear nuevo usuario',
+      'PUT /usuarios/:id': 'Actualizar usuario',
+      'DELETE /usuarios/:id': 'Eliminar usuario'
     }
   });
 });
