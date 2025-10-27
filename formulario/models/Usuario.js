@@ -37,10 +37,11 @@ const usuarioSchema = new mongoose.Schema({
         required: true,
         trim: true
     }
-
-}
-, {
-    timestamps: { createdAt: 'fechaRegistro', updatedAt: false }
+}, {
+    timestamps: {
+        createdAt: 'fechaRegistro',
+        updatedAt: 'fechaActualizacion'
+    }
 });
 
 const Usuario = mongoose.model('Usuario', usuarioSchema);

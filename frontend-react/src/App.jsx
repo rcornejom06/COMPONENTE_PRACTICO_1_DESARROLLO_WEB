@@ -1,21 +1,11 @@
-// App.jsx
 import { useState, useEffect } from 'react';
-import axios from 'axios';
 import './App.css';
 
-const API_MONGO = 'http://localhost:5000/api/mongo/usuarios';
-const API_SQLITE = 'http://localhost:5000/api/sqlite/usuarios';
+const GRAPHQL_ENDPOINT = 'http://localhost:5000/graphql';
 
 function App() {
-  // Estados para MongoDB
-  const [usuariosMongo, setUsuariosMongo] = useState([]);
-  const [editandoMongo, setEditandoMongo] = useState(null);
-
-  // Estados para SQLite
-  const [usuariosSQLite, setUsuariosSQLite] = useState([]);
-  const [editandoSQLite, setEditandoSQLite] = useState(null);
-
-  // Estados compartidos
+  const [usuarios, setUsuarios] = useState([]);
+  const [editando, setEditando] = useState(null);
   const [formulario, setFormulario] = useState({
     dni: '',
     nombres: '',
@@ -26,37 +16,48 @@ function App() {
   });
   const [errores, setErrores] = useState({});
   const [mensaje, setMensaje] = useState({ tipo: '', texto: '' });
-  const [bdActiva, setBdActiva] = useState('mongo'); // 'mongo' o 'sqlite'
 
   const ciudades = [
     'Guayaquil', 'Quito', 'Cuenca', 'Santo Domingo', 'Machala',
     'Durán', 'Manta', 'Portoviejo', 'Loja', 'Ambato'
   ];
 
-  // Cargar usuarios al montar el componente
+  // Cargar usuarios al montar
   useEffect(() => {
-    cargarUsuariosMongo();
-    cargarUsuariosSQLite();
+    cargarUsuarios();
   }, []);
 
-  // ============ MONGODB ============
-  const cargarUsuariosMongo = async () => {
-    try {
-      const response = await axios.get(API_MONGO);
-      setUsuariosMongo(response.data);
-    } catch (error) {
-      mostrarMensaje('error', 'Error al cargar usuarios de MongoDB');
-      console.error(error);
-    }
-  };
+  // ============ GRAPHQL QUERIES ============
+  const cargarUsuarios = async () => {
+    const query = `
+      query {
+        usuarios {
+          id
+          dni
+          nombres
+          apellidos
+          fechaNacimiento
+          genero
+          ciudad
+        }
+      }
+    `;
 
-  // ============ SQLITE ============
-  const cargarUsuariosSQLite = async () => {
     try {
-      const response = await axios.get(API_SQLITE);
-      setUsuariosSQLite(response.data);
+      const response = await fetch(GRAPHQL_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query })
+      });
+
+      const data = await response.json();
+      if (data.errors) {
+        mostrarMensaje('error', 'Error al cargar usuarios');
+        return;
+      }
+      setUsuarios(data.data.usuarios);
     } catch (error) {
-      mostrarMensaje('error', 'Error al cargar usuarios de SQLite');
+      mostrarMensaje('error', 'Error al cargar usuarios');
       console.error(error);
     }
   };
@@ -129,69 +130,141 @@ function App() {
     }
 
     try {
-      if (bdActiva === 'mongo') {
-        if (editandoMongo) {
-          await axios.put(`${API_MONGO}/${editandoMongo}`, formulario);
-          mostrarMensaje('success', 'Usuario actualizado en MongoDB ✅');
-        } else {
-          await axios.post(API_MONGO, formulario);
-          mostrarMensaje('success', 'Usuario creado en MongoDB ✅');
-        }
-        resetFormulario();
-        cargarUsuariosMongo();
+      if (editando) {
+        await actualizarUsuario();
       } else {
-        if (editandoSQLite) {
-          await axios.put(`${API_SQLITE}/${editandoSQLite}`, formulario);
-          mostrarMensaje('success', 'Usuario actualizado en SQLite ✅');
-        } else {
-          await axios.post(API_SQLITE, formulario);
-          mostrarMensaje('success', 'Usuario creado en SQLite ✅');
-        }
-        resetFormulario();
-        cargarUsuariosSQLite();
+        await crearUsuario();
       }
     } catch (error) {
-      mostrarMensaje('error', error.response?.data?.error || 'Error al guardar usuario');
+      mostrarMensaje('error', 'Error al guardar usuario');
+    }
+  };
+
+  const crearUsuario = async () => {
+    const mutation = `
+      mutation {
+        crearUsuario(
+          dni: "${formulario.dni}"
+          nombres: "${formulario.nombres}"
+          apellidos: "${formulario.apellidos}"
+          fechaNacimiento: "${formulario.fechaNacimiento}"
+          genero: "${formulario.genero}"
+          ciudad: "${formulario.ciudad}"
+        ) {
+          id
+          dni
+          nombres
+          apellidos
+          fechaNacimiento
+          genero
+          ciudad
+        }
+      }
+    `;
+
+    try {
+      const response = await fetch(GRAPHQL_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: mutation })
+      });
+
+      const data = await response.json();
+      if (data.errors) {
+        throw new Error(data.errors[0].message);
+      }
+
+      mostrarMensaje('success', 'Usuario creado ✅');
+      resetFormulario();
+      cargarUsuarios();
+    } catch (error) {
+      mostrarMensaje('error', error.message || 'Error al crear usuario');
+    }
+  };
+
+  const actualizarUsuario = async () => {
+    const mutation = `
+      mutation {
+        actualizarUsuario(
+          id: "${editando}"
+          dni: "${formulario.dni}"
+          nombres: "${formulario.nombres}"
+          apellidos: "${formulario.apellidos}"
+          fechaNacimiento: "${formulario.fechaNacimiento}"
+          genero: "${formulario.genero}"
+          ciudad: "${formulario.ciudad}"
+        ) {
+          id
+          dni
+          nombres
+          apellidos
+          fechaNacimiento
+          genero
+          ciudad
+        }
+      }
+    `;
+
+    try {
+      const response = await fetch(GRAPHQL_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: mutation })
+      });
+
+      const data = await response.json();
+      if (data.errors) {
+        throw new Error(data.errors[0].message);
+      }
+
+      mostrarMensaje('success', 'Usuario actualizado ✅');
+      resetFormulario();
+      cargarUsuarios();
+    } catch (error) {
+      mostrarMensaje('error', error.message || 'Error al actualizar usuario');
     }
   };
 
   // ============ EDITAR ============
-  const handleEditar = (usuario, tipo) => {
+  const handleEditar = (usuario) => {
     setFormulario({
       dni: usuario.dni,
       nombres: usuario.nombres,
       apellidos: usuario.apellidos,
-      fechaNacimiento: usuario.fechaNacimiento,
+      fechaNacimiento: usuario.fechaNacimiento.split('T')[0],
       genero: usuario.genero,
       ciudad: usuario.ciudad
     });
-
-    if (tipo === 'mongo') {
-      setEditandoMongo(usuario._id);
-      setBdActiva('mongo');
-    } else {
-      setEditandoSQLite(usuario.id);
-      setBdActiva('sqlite');
-    }
+    setEditando(usuario.id);
     setErrores({});
   };
 
   // ============ ELIMINAR ============
-  const handleEliminar = async (id, tipo) => {
+  const handleEliminar = async (id) => {
     if (!window.confirm('¿Está seguro de eliminar este usuario?')) {
       return;
     }
 
-    try {
-      if (tipo === 'mongo') {
-        await axios.delete(`${API_MONGO}/${id}`);
-        mostrarMensaje('success', 'Usuario eliminado de MongoDB ✅');
-        cargarUsuariosMongo();
-      } else {
-        await axios.delete(`${API_SQLITE}/${id}`);
-        mostrarMensaje('success', 'Usuario eliminado de SQLite ✅');
-        cargarUsuariosSQLite();
+    const mutation = `
+      mutation {
+        eliminarUsuario(id: "${id}")
       }
+    `;
+
+    try {
+      const response = await fetch(GRAPHQL_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: mutation })
+      });
+
+      const data = await response.json();
+      if (data.errors) {
+        throw new Error(data.errors[0].message);
+      }
+
+      mostrarMensaje('success', 'Usuario eliminado ✅');
+      cargarUsuarios();
     } catch (error) {
       mostrarMensaje('error', 'Error al eliminar usuario');
     }
@@ -207,8 +280,7 @@ function App() {
       genero: '',
       ciudad: ''
     });
-    setEditandoMongo(null);
-    setEditandoSQLite(null);
+    setEditando(null);
     setErrores({});
   };
 
@@ -220,7 +292,7 @@ function App() {
   return (
     <div className="app">
       <div className="container">
-        <h1>📝 Gestión de Usuarios - MongoDB + SQLite</h1>
+        <h1>📝 Gestión de Usuarios - GraphQL</h1>
 
         {mensaje.texto && (
           <div className={`mensaje ${mensaje.tipo}`}>
@@ -228,27 +300,10 @@ function App() {
           </div>
         )}
 
-        {/* Selector de Base de Datos */}
-        <div className="selector-bd">
-          <button
-            className={`btn-bd ${bdActiva === 'mongo' ? 'activo' : ''}`}
-            onClick={() => { setBdActiva('mongo'); resetFormulario(); }}
-          >
-            🍃 MongoDB
-          </button>
-          <button
-            className={`btn-bd ${bdActiva === 'sqlite' ? 'activo' : ''}`}
-            onClick={() => { setBdActiva('sqlite'); resetFormulario(); }}
-          >
-            🔒 SQLite
-          </button>
-        </div>
-
         {/* FORMULARIO */}
         <div className="formulario-card">
           <h2>
-            {bdActiva === 'mongo' ? '🍃 MongoDB - ' : '🔒 SQLite - '}
-            {(editandoMongo || editandoSQLite) ? '✏️ Editar Usuario' : '➕ Nuevo Usuario'}
+            {editando ? '✏️ Editar Usuario' : '➕ Nuevo Usuario'}
           </h2>
           <form onSubmit={handleSubmit}>
             <div className="form-group">
@@ -313,8 +368,8 @@ function App() {
                   <input
                     type="radio"
                     name="genero"
-                    value="masculino"
-                    checked={formulario.genero === 'masculino'}
+                    value="Masculino"
+                    checked={formulario.genero === 'Masculino'}
                     onChange={handleChange}
                   />
                   Masculino
@@ -323,8 +378,8 @@ function App() {
                   <input
                     type="radio"
                     name="genero"
-                    value="femenino"
-                    checked={formulario.genero === 'femenino'}
+                    value="Femenino"
+                    checked={formulario.genero === 'Femenino'}
                     onChange={handleChange}
                   />
                   Femenino
@@ -333,8 +388,8 @@ function App() {
                   <input
                     type="radio"
                     name="genero"
-                    value="otro"
-                    checked={formulario.genero === 'otro'}
+                    value="Otro"
+                    checked={formulario.genero === 'Otro'}
                     onChange={handleChange}
                   />
                   Otro
@@ -362,9 +417,9 @@ function App() {
 
             <div className="form-actions">
               <button type="submit" className="btn btn-primary">
-                {(editandoMongo || editandoSQLite) ? 'Actualizar' : 'Guardar'}
+                {editando ? 'Actualizar' : 'Guardar'}
               </button>
-              {(editandoMongo || editandoSQLite) && (
+              {editando && (
                 <button type="button" onClick={resetFormulario} className="btn btn-secondary">
                   Cancelar
                 </button>
@@ -373,111 +428,56 @@ function App() {
           </form>
         </div>
 
-        {/* TABLAS */}
-        <div className="tablas-container">
-          {/* Tabla MongoDB */}
-          <div className="tabla-card">
-            <h2>🍃 MongoDB ({usuariosMongo.length})</h2>
-            {usuariosMongo.length === 0 ? (
-              <p className="no-data">No hay usuarios registrados</p>
-            ) : (
-              <div className="tabla-responsive">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>DNI</th>
-                      <th>Nombres</th>
-                      <th>Apellidos</th>
-                      <th>F. Nacimiento</th>
-                      <th>Género</th>
-                      <th>Ciudad</th>
-                      <th>Acciones</th>
+        {/* TABLA */}
+        <div className="tabla-card">
+          <h2>🍃 Usuarios ({usuarios.length})</h2>
+          {usuarios.length === 0 ? (
+            <p className="no-data">No hay usuarios registrados</p>
+          ) : (
+            <div className="tabla-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th>DNI</th>
+                    <th>Nombres</th>
+                    <th>Apellidos</th>
+                    <th>F. Nacimiento</th>
+                    <th>Género</th>
+                    <th>Ciudad</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usuarios.map(usuario => (
+                    <tr key={usuario.id}>
+                      <td>{usuario.dni}</td>
+                      <td>{usuario.nombres}</td>
+                      <td>{usuario.apellidos}</td>
+                      <td>{new Date(usuario.fechaNacimiento).toLocaleDateString()}</td>
+                      <td>{usuario.genero}</td>
+                      <td>{usuario.ciudad}</td>
+                      <td>
+                        <button
+                          onClick={() => handleEditar(usuario)}
+                          className="btn btn-edit"
+                          title="Editar"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => handleEliminar(usuario.id)}
+                          className="btn btn-delete"
+                          title="Eliminar"
+                        >
+                          🗑️
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {usuariosMongo.map(usuario => (
-                      <tr key={usuario._id}>
-                        <td>{usuario.dni}</td>
-                        <td>{usuario.nombres}</td>
-                        <td>{usuario.apellidos}</td>
-                        <td>{new Date(usuario.fechaNacimiento).toLocaleDateString()}</td>
-                        <td>{usuario.genero}</td>
-                        <td>{usuario.ciudad}</td>
-                        <td>
-                          <button
-                            onClick={() => handleEditar(usuario, 'mongo')}
-                            className="btn btn-edit"
-                            title="Editar"
-                          >
-                            ✏️
-                          </button>
-                          <button
-                            onClick={() => handleEliminar(usuario._id, 'mongo')}
-                            className="btn btn-delete"
-                            title="Eliminar"
-                          >
-                            🗑️
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* Tabla SQLite */}
-          <div className="tabla-card">
-            <h2>🔒 SQLite ({usuariosSQLite.length})</h2>
-            {usuariosSQLite.length === 0 ? (
-              <p className="no-data">No hay usuarios registrados</p>
-            ) : (
-              <div className="tabla-responsive">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>DNI</th>
-                      <th>Nombres</th>
-                      <th>Apellidos</th>
-                      <th>F. Nacimiento</th>
-                      <th>Género</th>
-                      <th>Ciudad</th>
-                      <th>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {usuariosSQLite.map(usuario => (
-                      <tr key={usuario.id}>
-                        <td>{usuario.dni}</td>
-                        <td>{usuario.nombres}</td>
-                        <td>{usuario.apellidos}</td>
-                        <td>{new Date(usuario.fechaNacimiento).toLocaleDateString()}</td>
-                        <td>{usuario.genero}</td>
-                        <td>{usuario.ciudad}</td>
-                        <td>
-                          <button
-                            onClick={() => handleEditar(usuario, 'sqlite')}
-                            className="btn btn-edit"
-                            title="Editar"
-                          >
-                            ✏️
-                          </button>
-                          <button
-                            onClick={() => handleEliminar(usuario.id, 'sqlite')}
-                            className="btn btn-delete"
-                            title="Eliminar"
-                          >
-                            🗑️
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>
